@@ -8,6 +8,39 @@ import joyful
 log = joyful.utils.get_logger()
 
 
+import sys
+from types import ModuleType
+
+# Monkeypatch for legacy torch_geometric checkpoints
+try:
+    import torch_geometric.nn.conv.utils.inspector
+except ImportError:
+    # Create a dummy module
+    mock_inspector = ModuleType("torch_geometric.nn.conv.utils.inspector")
+    
+    # Define a dummy Inspector class which is likely what is being looked up
+    class Inspector:
+        def __init__(self, base_class):
+            pass
+        def inspect(self, *args, **kwargs):
+            return {}
+        def keys(self, *args, **kwargs):
+            return []
+        def implements(self, *args, **kwargs):
+            return False
+            
+    mock_inspector.Inspector = Inspector
+    
+    # Inject into sys.modules
+    sys.modules["torch_geometric.nn.conv.utils.inspector"] = mock_inspector
+
+# Monkeypatch for Module._lazy_load_hook (legacy PyTorch checkpoint issue)
+import torch.nn
+def dummy_lazy_load_hook(self, *args, **kwargs):
+    pass
+setattr(torch.nn.Module, "_lazy_load_hook", dummy_lazy_load_hook)
+print(f"DEBUG: Patched Module._lazy_load_hook: {hasattr(torch.nn.Module, '_lazy_load_hook')}")
+
 def load_pkl(file):
     with open(file, "rb") as f:
         return pickle.load(f)
@@ -20,6 +53,49 @@ def main(args):
     #model_dict = torch.load('model_checkpoints/iemocap_best_dev_f1_model_atv.pt')
     stored_args = model_dict["args"]
     model = model_dict["modelN_state_dict"]
+    
+    # Post-load patch for legacy PyG models
+    from torch_geometric.inspector import Inspector
+    for m in model.modules():
+        if not hasattr(m, "decomposed_layers"):
+            # Set internal attribute directly to bypass property setter checks
+            m._decomposed_layers = 1
+        if not hasattr(m, "explain"):
+            m.explain = False
+        
+        
+        # Patch for missing inspector-generated attributes
+        if hasattr(m, "message"): # Check for MessagePassing-like modules
+            # Overwrite the legacy inspector with a new compatible one
+            m.inspector = Inspector(m.__class__)
+            
+            # Legacy models might not have special_args, default to empty set
+            special_args = getattr(m, 'special_args', set())
+            
+            # Exclusion for inspection: remove 'inputs' to avoid collision, but KEEP special_args (like index) 
+            inspect_exclude = {'inputs'}
+            
+            # Manually inspect signatures with LIMITED exclusion
+            m.inspector.inspect_signature(m.message, exclude=inspect_exclude)
+            m.inspector.inspect_signature(m.aggregate, exclude=inspect_exclude)
+            if hasattr(m, "message_and_aggregate"):
+                m.inspector.inspect_signature(m.message_and_aggregate, exclude=inspect_exclude)
+            m.inspector.inspect_signature(m.update, exclude=inspect_exclude)
+            if hasattr(m, "edge_update"): 
+               m.inspector.inspect_signature(m.edge_update, exclude=inspect_exclude)
+            
+            # Populate user_args using the inspector (filtering out special_args as usual)
+            if not hasattr(m, "_user_args"):
+                m._user_args = m.inspector.get_flat_param_names(
+                    funcs=['message', 'aggregate', 'update'],
+                    exclude=special_args
+                )
+            if not hasattr(m, "_fused_user_args"):
+                m._fused_user_args = m.inspector.get_flat_param_names(
+                    funcs=['message_and_aggregate', 'update'],
+                    exclude=special_args
+                )
+            
     modelF = model_dict["modelF_state_dict"]
     testset = joyful.Dataset(data["test"], modelF, False, stored_args)
     test = True
