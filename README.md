@@ -33,7 +33,9 @@ For fast check, the check point is provided.
 ## Install
 To easily reproduce our results, you can install the environments by
 ```
-pip install -r requirements.txt
+pip install -r requirements.txt -f https://data.dgl.ai/wheels/torch-2.4/cu121/repo.html -f https://data.pyg.org/whl/torch-2.4.0+cu121.html -f https://download.pytorch.org/whl/cu121
+
+
 ```
 
 
