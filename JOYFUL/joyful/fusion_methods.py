@@ -64,4 +64,3 @@ class AutoFusion(nn.Module):
         loss = globalLoss + interLoss
 
         return torch.cat((globalCompressed, interCompressed), 0), loss
-
