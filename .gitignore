@@ -1,2 +1,3 @@
 JOYFUL/joyful/__pycache__
-JOYFUL/model_checkpoints
+JOYFUL/model_checkpoints/*
+JOYFUL/data/*
