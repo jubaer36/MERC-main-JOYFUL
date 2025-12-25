@@ -1,3 +1,8 @@
 JOYFUL/joyful/__pycache__
 JOYFUL/model_checkpoints/*
-JOYFUL/data/*
+JOYFUL/data/raw-data/*
+JOYFUL/data/iemocap/*
+JOYFUL/data/iemocap_4/*
+JOYFUL/data/iemocap_test/*
+JOYFUL/data/features/*
+JOYFUL/data/__pycache__/*
